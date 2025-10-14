@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioCompare</title>
+    <style>
+        :root {
+            --accent: teal;
+            --muted: #6b7280;
+            --bg-light: #f8f9fa;
+            --border-color: #dee2e6;
+            --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+        }
+        body {
+            font-family: var(--font-sans);
+            margin: 0;
+            padding: 2rem;
+            background-color: #fff;
+            color: #212529;
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        h1 { color: var(--accent); }
+        .container { display: flex; flex-direction: column; gap: 2rem; }
+        .input-section, .results-section {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            background-color: var(--bg-light);
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 0.5rem;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            font-family: var(--font-mono);
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .input-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        .controls {
+            margin-top: 1rem;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        button {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 4px;
+            background-color: var(--accent);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:disabled { background-color: var(--muted); cursor: not-allowed; }
+        .spinner {
+            width: 24px; height: 24px;
+            border: 3px solid rgba(0,0,0,0.1);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: none; /* Hidden by default */
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #error-display {
+            color: #dc3545;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+            display: none; /* Hidden by default */
+        }
+        .results-section { display: none; } /* Hidden until results are ready */
+        .results-header { display: flex; justify-content: space-between; align-items: center; }
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+        .result-column {
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 1rem;
+            background-color: #fff;
+            height: 300px;
+            overflow-y: auto;
+        }
+        .result-column h4 { margin-top: 0; }
+        .result-item {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            padding: 0.25rem 0;
+            border-bottom: 1px solid #f1f1f1;
+        }
+        #venn-diagram { text-align: center; }
+        .download-controls { margin-top: 1rem; display: flex; gap: 1rem; }
+        @media (max-width: 768px) {
+            .input-grid, .comparison-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/venn.js@0.2.20/build/venn.min.js"></script>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>BioCompare</h1>
+            <p>Compare up-regulated vs. down-regulated gene lists to find unique and shared functional themes.</p>
+        </header>
+
+        <section class="input-section">
+            <div class="input-grid">
+                <div>
+                    <label for="up-regulated-list">Up-regulated Genes (Ensembl IDs)</label>
+                    <textarea id="up-regulated-list" placeholder="Paste Ensembl IDs here..."></textarea>
+                </div>
+                <div>
+                    <label for="down-regulated-list">Down-regulated Genes (Ensembl IDs)</label>
+                    <textarea id="down-regulated-list" placeholder="Paste Ensembl IDs here..."></textarea>
+                </div>
+            </div>
+            <div class="controls">
+                <button id="submit-btn">Submit</button>
+                <button id="clear-btn" style="background-color: var(--muted);">Clear</button>
+                <button id="example-btn" style="background-color: #007bff;">Example</button>
+                <div id="loading-indicator" class="spinner"></div>
+            </div>
+            <div id="error-display"></div>
+        </section>
+
+        <section id="results-section" class="results-section">
+            <div class="results-header">
+                <div>
+                    <h3>Results</h3>
+                    <p id="summary-stats"></p>
+                </div>
+                <button id="download-tsv-btn">Download Results (TSV)</button>
+            </div>
+
+            <hr>
+            
+            <h4>GO Term Comparison</h4>
+            <div id="venn-diagram"></div>
+            <div class="download-controls">
+                <button id="download-svg-btn">Download as SVG</button>
+                <button id="download-png-btn">Download as PNG</button>
+            </div>
+
+            <div class="comparison-grid" id="go-term-grid">
+                <div class="result-column">
+                    <h4>Unique to Up-regulated</h4>
+                    <div id="go-unique-up"></div>
+                </div>
+                <div class="result-column">
+                    <h4>Shared</h4>
+                    <div id="go-shared"></div>
+                </div>
+                <div class="result-column">
+                    <h4>Unique to Down-regulated</h4>
+                    <div id="go-unique-down"></div>
+                </div>
+            </div>
+            
+            <hr style="margin-top: 2rem;">
+
+            <h4>Protein-Protein Interaction (PPI) Analysis</h4>
+            <div class="comparison-grid" id="ppi-grid">
+                 <div class="result-column">
+                    <h4>Internal (Up-regulated)</h4>
+                    <div id="ppi-internal-up"></div>
+                </div>
+                <div class="result-column">
+                    <h4>Cross-talk</h4>
+                    <div id="ppi-cross-talk"></div>
+                </div>
+                <div class="result-column">
+                    <h4>Internal (Down-regulated)</h4>
+                    <div id="ppi-internal-down"></div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- DOM ELEMENT REFERENCES ---
+    const upList = document.getElementById('up-regulated-list');
+    const downList = document.getElementById('down-regulated-list');
+    const submitBtn = document.getElementById('submit-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    const exampleBtn = document.getElementById('example-btn');
+    const loadingIndicator = document.getElementById('loading-indicator');
+    const errorDisplay = document.getElementById('error-display');
+    const resultsSection = document.getElementById('results-section');
+    const summaryStats = document.getElementById('summary-stats');
+    const vennContainer = document.getElementById('venn-diagram');
+    
+    // GO Term elements
+    const goUniqueUp = document.getElementById('go-unique-up');
+    const goShared = document.getElementById('go-shared');
+    const goUniqueDown = document.getElementById('go-unique-down');
+    
+    // PPI elements
+    const ppiInternalUp = document.getElementById('ppi-internal-up');
+    const ppiCrossTalk = document.getElementById('ppi-cross-talk');
+    const ppiInternalDown = document.getElementById('ppi-internal-down');
+
+    // Download buttons
+    const downloadTsvBtn = document.getElementById('download-tsv-btn');
+    const downloadSvgBtn = document.getElementById('download-svg-btn');
+    const downloadPngBtn = document.getElementById('download-png-btn');
+
+    const API_ENDPOINT = 'http://127.0.0.1:8000/compare';
+    let lastResponseData = null; // To store the last successful response
+
+    // --- HELPER FUNCTIONS ---
+    const setBusy = (isBusy) => {
+        submitBtn.disabled = isBusy;
+        loadingIndicator.style.display = isBusy ? 'block' : 'none';
+        errorDisplay.style.display = 'none';
+    };
+
+    const showError = (message) => {
+        errorDisplay.textContent = `Error: ${message}`;
+        errorDisplay.style.display = 'block';
+    };
+
+    const hideResults = () => {
+        resultsSection.style.display = 'none';
+    };
+
+    // --- EVENT LISTENERS ---
+    clearBtn.addEventListener('click', () => {
+        upList.value = '';
+        downList.value = '';
+        hideResults();
+    });
+
+    exampleBtn.addEventListener('click', () => {
+        upList.value = "ENSG00000141510\nENSG00000012048\nENSG00000146648";
+        downList.value = "ENSG00000232810\nENSG00000136244";
+        hideResults();
+    });
+
+    submitBtn.addEventListener('click', async () => {
+        const upGenes = upList.value.split(/[\s,]+/).filter(Boolean);
+        const downGenes = downList.value.split(/[\s,]+/).filter(Boolean);
+
+        if (upGenes.length === 0 && downGenes.length === 0) {
+            showError('Please provide at least one gene list.');
+            return;
+        }
+
+        setBusy(true);
+        hideResults();
+        
+        try {
+            const response = await fetch(API_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    up_regulated: upGenes,
+                    down_regulated: downGenes,
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || `Server responded with status ${response.status}`);
+            }
+
+            const data = await response.json();
+            lastResponseData = data; // Store for downloads
+            renderResults(data);
+
+        } catch (error) {
+            showError(error.message);
+        } finally {
+            setBusy(false);
+        }
+    });
+    
+    // --- RENDERING FUNCTIONS ---
+    const renderResults = (data) => {
+        resultsSection.style.display = 'block';
+
+        // 1. Summary Stats
+        const { summary, go_comparison, ppi_analysis } = data;
+        summaryStats.textContent = `Found ${summary.up_regulated_mapped_count} of ${summary.up_regulated_submitted_count} up-regulated genes and ${summary.down_regulated_mapped_count} of ${summary.down_regulated_submitted_count} down-regulated genes.`;
+
+        // 2. Venn Diagram
+        renderVennDiagram(go_comparison);
+
+        // 3. GO Term Lists
+        renderGoLists(go_comparison);
+        
+        // 4. PPI Lists
+        renderPpiLists(ppi_analysis);
+    };
+
+    const renderVennDiagram = (goData) => {
+        vennContainer.innerHTML = '';
+        const sets = [
+            { sets: ['Up-regulated'], size: goData.unique_to_up_regulated.length + goData.shared.length },
+            { sets: ['Down-regulated'], size: goData.unique_to_down_regulated.length + goData.shared.length },
+            { sets: ['Up-regulated', 'Down-regulated'], size: goData.shared.length }
+        ];
+
+        const chart = venn.VennDiagram();
+        d3.select(vennContainer).datum(sets).call(chart);
+    };
+
+    const renderGoLists = (goData) => {
+        const createGoItem = item => `<div class="result-item"><strong>${item.id}</strong>: ${item.term}</div>`;
+        goUniqueUp.innerHTML = goData.unique_to_up_regulated.map(createGoItem).join('');
+        goShared.innerHTML = goData.shared.map(createGoItem).join('');
+        goUniqueDown.innerHTML = goData.unique_to_down_regulated.map(createGoItem).join('');
+    };
+
+    const renderPpiLists = (ppiData) => {
+        const createPpiItem = item => `<div class="result-item">${item['Official Symbol Interactor A']} ↔ ${item['Official Symbol Interactor B']}</div>`;
+        ppiInternalUp.innerHTML = ppiData.internal_up_regulated.map(createPpiItem).join('');
+        ppiCrossTalk.innerHTML = ppiData.cross_talk.map(createPpiItem).join('');
+        ppiInternalDown.innerHTML = ppiData.internal_down_regulated.map(createPpiItem).join('');
+    };
+    
+    // --- DOWNLOAD FUNCTIONALITY ---
+    downloadSvgBtn.addEventListener('click', () => {
+        const svgElement = vennContainer.querySelector('svg');
+        if (!svgElement) return;
+        const serializer = new XMLSerializer();
+        const source = '<?xml version="1.0" standalone="no"?>\r\n' + serializer.serializeToString(svgElement);
+        const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'venn_diagram.svg';
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+
+    downloadPngBtn.addEventListener('click', () => {
+        const svgElement = vennContainer.querySelector('svg');
+        if (!svgElement) return;
+        const serializer = new XMLSerializer();
+        const source = '<?xml version="1.0" standalone="no"?>\r\n' + serializer.serializeToString(svgElement);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        
+        img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            const pngUrl = canvas.toDataURL('image/png');
+            const a = document.createElement('a');
+            a.href = pngUrl;
+            a.download = 'venn_diagram.png';
+            a.click();
+            URL.revokeObjectURL(pngUrl);
+        };
+        img.src = url;
+    });
+
+    downloadTsvBtn.addEventListener('click', () => {
+        if (!lastResponseData) return;
+        
+        let tsvContent = "data:text/tab-separated-values;charset=utf-8,";
+        const { go_comparison, ppi_analysis } = lastResponseData;
+        
+        tsvContent += "Category\tType\tValue1\tValue2\n";
+
+        go_comparison.unique_to_up_regulated.forEach(item => {
+            tsvContent += `GO\tUnique_to_Up-regulated\t${item.id}\t${item.term}\n`;
+        });
+        go_comparison.shared.forEach(item => {
+            tsvContent += `GO\tShared\t${item.id}\t${item.term}\n`;
+        });
+        go_comparison.unique_to_down_regulated.forEach(item => {
+            tsvContent += `GO\tUnique_to_Down-regulated\t${item.id}\t${item.term}\n`;
+        });
+
+        ppi_analysis.internal_up_regulated.forEach(item => {
+            tsvContent += `PPI\tInternal_Up-regulated\t${item['Official Symbol Interactor A']}\t${item['Official Symbol Interactor B']}\n`;
+        });
+        ppi_analysis.cross_talk.forEach(item => {
+            tsvContent += `PPI\tCross-talk\t${item['Official Symbol Interactor A']}\t${item['Official Symbol Interactor B']}\n`;
+        });
+        ppi_analysis.internal_down_regulated.forEach(item => {
+            tsvContent += `PPI\tInternal_Down-regulated\t${item['Official Symbol Interactor A']}\t${item['Official Symbol Interactor B']}\n`;
+        });
+
+        const encodedUri = encodeURI(tsvContent);
+        const a = document.createElement('a');
+        a.href = encodedUri;
+        a.download = 'biocompare_results.tsv';
+        a.click();
+    });
+});
+</script>
+</body>
+</html>
+```eof
+
+I've generated the complete `index.html` file based on the prompt. It includes all the requested features, styling, and JavaScript logic to create a fully functional frontend for your application.
