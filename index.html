@@ -223,7 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadSvgBtn = document.getElementById('download-svg-btn');
     const downloadPngBtn = document.getElementById('download-png-btn');
 
-    const API_ENDPOINT = 'http://127.0.0.1:8000/compare';
+    const API_ENDPOINT = 'https://geneinsight-by-rudra.onrender.com/compare';
     let lastResponseData = null; // To store the last successful response
 
     // --- HELPER FUNCTIONS ---
@@ -408,13 +408,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const encodedUri = encodeURI(tsvContent);
         const a = document.createElement('a');
         a.href = encodedUri;
-        a.download = 'biocompare_results.tsv';
+        a.download = 'Rudra's_GeneInsight_results.tsv';
         a.click();
     });
 });
 </script>
 </body>
 </html>
-```eof
-
-I've generated the complete `index.html` file based on the prompt. It includes all the requested features, styling, and JavaScript logic to create a fully functional frontend for your application.
