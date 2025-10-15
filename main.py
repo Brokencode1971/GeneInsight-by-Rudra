@@ -6,11 +6,15 @@ from contextlib import asynccontextmanager
 from sqlalchemy import create_engine
 from supabase import create_client, Client
 import re
+# **NEW:** Import the CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 
 # --- SUPABASE CONFIGURATION ---
-SUPABASE_URL = "https://cvtnomojgmdufcahnmkp.supabase.co"
-SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2dG5vbW9qZ21kdWZjYWhubWtwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDQ3NDQwNCwiZXhwIjoyMDc2MDUwNDA0fQ.kcdjR_dQ-iPOWJYJnSGA2bKFcMRyduYJZgG6g0xrgTU"
-DB_PASSWORD = "bb2PFAydpj4TcIw8"
+# These should be set as Environment Variables in Render, not hardcoded.
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://cvtnomojgmdufcahnmkp.supabase.co")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "YOUR_KEY_HERE")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "YOUR_PASSWORD_HERE")
+
 
 # --- DATA STORAGE ---
 # Global variables to hold our data in memory
@@ -28,7 +32,7 @@ async def lifespan(app: FastAPI):
     
     try:
         # Initialize database engine
-        db_url = f"postgresql://postgres:{DB_PASSWORD}@db.cvtnomojgmdufcahnmkp.supabase.co:5432/postgres"
+        db_url = f"postgresql://postgres:{DB_PASSWORD}@db.{SUPABASE_URL.split('//')[1]}:5432/postgres"
         engine = create_engine(db_url)
         
         # Load data from Supabase tables
@@ -47,6 +51,8 @@ async def lifespan(app: FastAPI):
         
     except Exception as e:
         print(f"❌ Error loading data from Supabase: {e}")
+        # In a production app, you might want to handle this more gracefully
+        # For now, we let it fail loudly so we see the error in the logs.
         raise e
 
     print("Server is ready.")
@@ -59,10 +65,10 @@ app = FastAPI(lifespan=lifespan)
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"], # Allows all origins
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"], # Allows all methods
+    allow_headers=["*"], # Allows all headers
 )
 
 # --- DEFINE INPUT MODEL ---
@@ -89,7 +95,7 @@ async def health_check():
 async def compare_gene_lists(lists: GeneLists):
     # Check if data is loaded
     if gene_info_df is None or go_terms_map_df is None or ensembl_to_go_df is None:
-        raise HTTPException(status_code=503, detail="Service starting up, please try again in a moment")
+        raise HTTPException(status_code=503, detail="Service is starting up or data failed to load, please try again in a moment.")
     
     # 1. Clean and validate the input Ensembl ID lists
     ensembl_ids_a = {s.strip().upper() for s in lists.up_regulated if s.strip()}
