@@ -1,56 +1,68 @@
 import pandas as pd
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
+from sqlalchemy import create_engine
+from supabase import create_client, Client
 import re
-# **NEW:** Import the CORSMiddleware
-from fastapi.middleware.cors import CORSMiddleware
+
+# --- SUPABASE CONFIGURATION ---
+SUPABASE_URL = "https://cvtnomojgmdufcahnmkp.supabase.co"
+SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2dG5vbW9qZ21kdWZjYWhubWtwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDQ3NDQwNCwiZXhwIjoyMDc2MDUwNDA0fQ.kcdjR_dQ-iPOWJYJnSGA2bKFcMRyduYJZgG6g0xrgTU"
+DB_PASSWORD = "bb2PFAydpj4TcIw8"
 
 # --- DATA STORAGE ---
 # Global variables to hold our data in memory
 gene_info_df = None
 go_terms_map_df = None
-biogrid_ppi_df = None
 ensembl_to_go_df = None
 
-# --- SETUP: LOAD DATA ON STARTUP ---
+# --- SETUP: LOAD DATA FROM SUPABASE ON STARTUP ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Server starting up...")
-    print("Loading data files into memory...")
+    print("Loading data from Supabase...")
 
-    global gene_info_df, go_terms_map_df, biogrid_ppi_df, ensembl_to_go_df
+    global gene_info_df, go_terms_map_df, ensembl_to_go_df
     
-    processed_dir = 'processed_data'
-    
-    gene_info_df = pd.read_csv(os.path.join(processed_dir, 'genes.tsv'), sep='\t')
-    go_terms_map_df = pd.read_csv(os.path.join(processed_dir, 'go_terms.tsv'), sep='\t') 
-    biogrid_ppi_df = pd.read_csv(os.path.join(processed_dir, 'biogrid_ppi.tsv'), sep='\t', low_memory=False)
-    ensembl_to_go_df = pd.read_csv(os.path.join(processed_dir, 'ensembl_to_go.tsv'), sep='\t')
+    try:
+        # Initialize database engine
+        db_url = f"postgresql://postgres:{DB_PASSWORD}@db.cvtnomojgmdufcahnmkp.supabase.co:5432/postgres"
+        engine = create_engine(db_url)
+        
+        # Load data from Supabase tables
+        gene_info_df = pd.read_sql_table('genes', engine)
+        go_terms_map_df = pd.read_sql_table('go_terms', engine)
+        ensembl_to_go_df = pd.read_sql_table('ensembl_to_go', engine)
+        
+        # Data cleaning and uppercase conversion for consistent matching
+        if 'gene_symbol' in gene_info_df.columns:
+            gene_info_df['gene_symbol'] = gene_info_df['gene_symbol'].str.upper()
+        
+        print("✅ Data loading from Supabase complete.")
+        print(f"   - Genes: {len(gene_info_df)} rows")
+        print(f"   - GO Terms: {len(go_terms_map_df)} rows") 
+        print(f"   - Gene-GO Mappings: {len(ensembl_to_go_df)} rows")
+        
+    except Exception as e:
+        print(f"❌ Error loading data from Supabase: {e}")
+        raise e
 
-    # Data cleaning and uppercase conversion for consistent matching
-    if 'gene_symbol' in gene_info_df.columns:
-        gene_info_df['gene_symbol'] = gene_info_df['gene_symbol'].str.upper()
-    if 'Official Symbol Interactor A' in biogrid_ppi_df.columns:
-        biogrid_ppi_df['Official Symbol Interactor A'] = biogrid_ppi_df['Official Symbol Interactor A'].str.upper()
-    if 'Official Symbol Interactor B' in biogrid_ppi_df.columns:
-        biogrid_ppi_df['Official Symbol Interactor B'] = biogrid_ppi_df['Official Symbol Interactor B'].str.upper()
-
-    print("Data loading complete. Server is ready.")
+    print("Server is ready.")
     yield
     print("Server shutting down...")
 
 # --- INITIALIZE FASTAPI APP ---
 app = FastAPI(lifespan=lifespan)
 
-# **NEW:** Add the CORS middleware to the application
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # --- DEFINE INPUT MODEL ---
@@ -58,12 +70,33 @@ class GeneLists(BaseModel):
     up_regulated: list[str]
     down_regulated: list[str]
 
+# --- HEALTH CHECK ENDPOINT ---
+@app.get("/")
+async def root():
+    return {"message": "Gene Comparison API is running", "status": "healthy"}
+
+@app.get("/health")
+async def health_check():
+    data_status = {
+        "genes_loaded": gene_info_df is not None and len(gene_info_df) > 0,
+        "go_terms_loaded": go_terms_map_df is not None and len(go_terms_map_df) > 0,
+        "mappings_loaded": ensembl_to_go_df is not None and len(ensembl_to_go_df) > 0
+    }
+    return {"status": "healthy", "data_loaded": data_status}
+
 # --- API ENDPOINT ---
 @app.post("/compare")
 async def compare_gene_lists(lists: GeneLists):
+    # Check if data is loaded
+    if gene_info_df is None or go_terms_map_df is None or ensembl_to_go_df is None:
+        raise HTTPException(status_code=503, detail="Service starting up, please try again in a moment")
+    
     # 1. Clean and validate the input Ensembl ID lists
     ensembl_ids_a = {s.strip().upper() for s in lists.up_regulated if s.strip()}
     ensembl_ids_b = {s.strip().upper() for s in lists.down_regulated if s.strip()}
+
+    if not ensembl_ids_a and not ensembl_ids_b:
+        raise HTTPException(status_code=400, detail="Both gene lists are empty")
 
     # 2. Get the count of mapped genes
     db_ensembl_ids = set(gene_info_df['ensembl_gene_id'].dropna())
@@ -86,18 +119,10 @@ async def compare_gene_lists(lists: GeneLists):
         terms = go_terms_map_df[go_terms_map_df['GO_ID'].isin(id_list)]
         return terms.rename(columns={'GO_ID': 'id', 'GO_Term': 'term'}).to_dict('records')
 
-    # 4. Perform PPI Network Analysis
+    # 4. Get gene symbols for potential future use
     symbols_a = set(gene_info_df[gene_info_df['ensembl_gene_id'].isin(ensembl_ids_a)]['gene_symbol'])
     symbols_b = set(gene_info_df[gene_info_df['ensembl_gene_id'].isin(ensembl_ids_b)]['gene_symbol'])
 
-    internal_a = biogrid_ppi_df[biogrid_ppi_df['Official Symbol Interactor A'].isin(symbols_a) & biogrid_ppi_df['Official Symbol Interactor B'].isin(symbols_a)]
-    internal_b = biogrid_ppi_df[biogrid_ppi_df['Official Symbol Interactor A'].isin(symbols_b) & biogrid_ppi_df['Official Symbol Interactor B'].isin(symbols_b)]
-    cross_talk = biogrid_ppi_df[
-        (biogrid_ppi_df['Official Symbol Interactor A'].isin(symbols_a) & biogrid_ppi_df['Official Symbol Interactor B'].isin(symbols_b)) |
-        (biogrid_ppi_df['Official Symbol Interactor A'].isin(symbols_b) & biogrid_ppi_df['Official Symbol Interactor B'].isin(symbols_a))
-    ]
-    ppi_cols = ['Official Symbol Interactor A', 'Official Symbol Interactor B']
-    
     # 5. Final JSON Response
     return {
         "summary": {
@@ -111,9 +136,8 @@ async def compare_gene_lists(lists: GeneLists):
             "unique_to_down_regulated": get_terms_from_ids(unique_go_b_ids),
             "shared": get_terms_from_ids(shared_go_ids)
         },
-        "ppi_analysis": {
-            "internal_up_regulated": internal_a[ppi_cols].to_dict('records'),
-            "internal_down_regulated": internal_b[ppi_cols].to_dict('records'),
-            "cross_talk": cross_talk[ppi_cols].to_dict('records')
+        "gene_symbols": {
+            "up_regulated": list(symbols_a),
+            "down_regulated": list(symbols_b)
         }
     }
