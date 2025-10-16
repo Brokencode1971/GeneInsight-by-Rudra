@@ -125,3 +125,4 @@ async def compare_gene_lists(lists: GeneLists):
             "down_regulated": list(symbols_b)
         }
     }
+
