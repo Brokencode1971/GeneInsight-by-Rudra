@@ -7,6 +7,8 @@ from sqlalchemy import create_engine
 from supabase import create_client, Client
 import re
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles 
+from fastapi.responses import FileResponse
 
 # --- DATABASE CONFIGURATION ---
 # Get individual connection components from environment variables
@@ -58,6 +60,14 @@ async def lifespan(app: FastAPI):
 # --- INITIALIZE FASTAPI APP ---
 app = FastAPI(lifespan=lifespan)
 
+# Serve static files (CSS, JS, etc.)
+app.mount("/static", StaticFiles(directory="."), name="static")
+
+# Serve the HTML frontend at root path
+@app.get("/", response_class=FileResponse)
+async def serve_frontend():
+    return FileResponse("index.html")
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -71,11 +81,6 @@ app.add_middleware(
 class GeneLists(BaseModel):
     up_regulated: list[str]
     down_regulated: list[str]
-
-# --- HEALTH CHECK ENDPOINT ---
-@app.get("/")
-async def root():
-    return {"message": "Gene Comparison API is running", "status": "healthy"}
 
 # --- API ENDPOINT ---
 @app.post("/compare")
@@ -128,3 +133,4 @@ async def compare_gene_lists(lists: GeneLists):
             "down_regulated": list(symbols_b)
         }
     }
+
