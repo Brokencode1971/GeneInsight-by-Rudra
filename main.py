@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 DB_PASSWORD = os.environ.get("DB_PASSWORD")
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 # --- DATA STORAGE ---
 # Global variables to hold our data in memory
@@ -30,8 +31,7 @@ async def lifespan(app: FastAPI):
     
     try:
         # Initialize database engine
-        db_url = f"postgresql://postgres:{DB_PASSWORD}@db.{SUPABASE_URL.split('//')[1]}:5432/postgres"
-        engine = create_engine(db_url)
+        engine = create_engine(DATABASE_URL)
         
         # Load data from Supabase tables
         gene_info_df = pd.read_sql_table('genes', engine)
@@ -125,5 +125,6 @@ async def compare_gene_lists(lists: GeneLists):
             "down_regulated": list(symbols_b)
         }
     }
+
 
 
