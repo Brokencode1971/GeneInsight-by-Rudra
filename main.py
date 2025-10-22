@@ -6,17 +6,20 @@ from contextlib import asynccontextmanager
 from sqlalchemy import create_engine
 from supabase import create_client, Client
 import re
-# **THIS IS THE FIX:** Import the CORSMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 
-# --- SUPABASE CONFIGURATION ---
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
+# --- DATABASE CONFIGURATION ---
+# Get individual connection components from environment variables
+DB_USER = os.environ.get("DB_USER", "postgres.cvtnomojgmdufcahnmkp")
 DB_PASSWORD = os.environ.get("DB_PASSWORD")
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DB_HOST = os.environ.get("DB_HOST", "aws-1-us-east-2.pooler.supabase.com")
+DB_PORT = os.environ.get("DB_PORT", "6543")
+DB_NAME = os.environ.get("DB_NAME", "postgres")
+
+# Construct the proper SQLAlchemy connection string (Supabase recommended format)
+DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?sslmode=require"
 
 # --- DATA STORAGE ---
-# Global variables to hold our data in memory
 gene_info_df = None
 go_terms_map_df = None
 ensembl_to_go_df = None
@@ -30,7 +33,7 @@ async def lifespan(app: FastAPI):
     global gene_info_df, go_terms_map_df, ensembl_to_go_df
     
     try:
-        # Initialize database engine
+        # Create engine with proper SQLAlchemy format
         engine = create_engine(DATABASE_URL)
         
         # Load data from Supabase tables
@@ -125,6 +128,3 @@ async def compare_gene_lists(lists: GeneLists):
             "down_regulated": list(symbols_b)
         }
     }
-
-
-
