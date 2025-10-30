@@ -106,6 +106,51 @@
         }
         #venn-diagram { text-align: center; }
         .download-controls { margin-top: 1rem; display: flex; gap: 1rem; }
+        
+        /* --- STYLES FOR THE NEW MODAL --- */
+        #modal-overlay {
+            position: fixed; /* Sit on top of the page content */
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5); /* Black background with opacity */
+            backdrop-filter: blur(5px); /* This is the blur effect */
+            z-index: 2000; /* Make sure it's on top */
+            display: flex; /* Use flexbox to center the modal */
+            justify-content: center;
+            align-items: center;
+        }
+
+        #about-box {
+            background: #f0f9ff;
+            border: 2px solid var(--accent);
+            border-radius: 8px;
+            padding: 2rem;
+            width: 90%;
+            max-width: 600px; /* Max width for the modal */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        
+        #about-box h4 {
+            margin: 0 0 1rem 0;
+            color: var(--accent);
+            font-size: 1.2rem;
+        }
+        
+        #about-box p {
+            margin: 0.5rem 0;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .modal-actions {
+            text-align: center; /* Center the button */
+            margin-top: 1.5rem;
+        }
+
+        /* --- END OF MODAL STYLES --- */
+
         @media (max-width: 768px) {
             .input-grid, .comparison-grid { grid-template-columns: 1fr; }
         }
@@ -114,34 +159,37 @@
     <script src="https://cdn.jsdelivr.net/npm/venn.js@0.2.20/build/venn.min.js"></script>
 </head>
 <body>
+    <div id="modal-overlay">
+        <div id="about-box">
+            <h4>About BioCompare</h4>
+            
+            <p>
+                BioCompare helps researchers analyze gene expression data by comparing up-regulated and down-regulated gene lists 
+                to identify unique and shared biological functions. Simply paste your Ensembl IDs to quickly discover functional 
+                patterns and export publication-ready results.
+            </p>
+            
+            <p>
+                <strong>Currently Available:</strong> GO term comparison, Venn diagrams, data export
+            </p>
+            
+            <p>
+                <strong>Coming Soon:</strong> Protein interaction networks & pathway analysis<br>
+                <small style="color: #666;">(Temporarily limited due to database size constraints)</small>
+            </p>
+            
+            <div class="modal-actions">
+                <button id="close-notice-btn">Got it</button>
+            </div>
+        </div>
+    </div>
+
 
     <div class="container">
         <header>
             <h1>BioCompare</h1>
             <p>Compare up-regulated vs. down-regulated gene lists to find unique and shared functional themes.</p>
         </header>
-
-        <div id="about-box" style="background: #f0f9ff; border: 2px solid teal; border-radius: 8px; padding: 1rem; margin: 1rem 0; position: relative;">
-            <button onclick="document.getElementById('about-box').style.display='none'"
-                    style="position: absolute; top: 0.5rem; right: 0.5rem; background: none; border: none; font-size: 1.2rem; cursor: pointer;">×</button>
-            
-            <h4 style="margin: 0 0 0.5rem 0; color: teal;">About BioCompare</h4>
-            
-            <p style="margin: 0.5rem 0; font-size: 0.9rem; line-height: 1.4;">
-                BioCompare helps researchers analyze gene expression data by comparing up-regulated and down-regulated gene lists 
-                to identify unique and shared biological functions. Simply paste your Ensembl IDs to quickly discover functional 
-                patterns and export publication-ready results.
-            </p>
-            
-            <p style="margin: 0.5rem 0; font-size: 0.9rem;">
-                <strong>Currently Available:</strong> GO term comparison, Venn diagrams, data export
-            </p>
-            
-            <p style="margin: 0.5rem 0; font-size: 0.9rem;">
-                <strong>Coming Soon:</strong> Protein interaction networks & pathway analysis<br>
-                <small style="color: #666;">(Temporarily limited due to database size constraints)</small>
-            </p>
-        </div>
 
         <section class="input-section">
             <div class="input-grid">
@@ -218,7 +266,15 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    // --- DOM ELEMENT REFERENCES ---
+    // --- MODAL FUNCTIONALITY (Newly Added) ---
+    const modalOverlay = document.getElementById('modal-overlay');
+    const closeNoticeBtn = document.getElementById('close-notice-btn');
+
+    closeNoticeBtn.addEventListener('click', () => {
+        modalOverlay.style.display = 'none';
+    });
+
+    // --- ORIGINAL DOM ELEMENT REFERENCES ---
     const upList = document.getElementById('up-regulated-list');
     const downList = document.getElementById('down-regulated-list');
     const submitBtn = document.getElementById('submit-btn');
