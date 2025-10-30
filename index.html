@@ -121,6 +121,28 @@
             <p>Compare up-regulated vs. down-regulated gene lists to find unique and shared functional themes.</p>
         </header>
 
+        <div id="about-box" style="background: #f0f9ff; border: 2px solid teal; border-radius: 8px; padding: 1rem; margin: 1rem 0; position: relative;">
+            <button onclick="document.getElementById('about-box').style.display='none'"
+                    style="position: absolute; top: 0.5rem; right: 0.5rem; background: none; border: none; font-size: 1.2rem; cursor: pointer;">×</button>
+            
+            <h4 style="margin: 0 0 0.5rem 0; color: teal;">About BioCompare</h4>
+            
+            <p style="margin: 0.5rem 0; font-size: 0.9rem; line-height: 1.4;">
+                BioCompare helps researchers analyze gene expression data by comparing up-regulated and down-regulated gene lists 
+                to identify unique and shared biological functions. Simply paste your Ensembl IDs to quickly discover functional 
+                patterns and export publication-ready results.
+            </p>
+            
+            <p style="margin: 0.5rem 0; font-size: 0.9rem;">
+                <strong>Currently Available:</strong> GO term comparison, Venn diagrams, data export
+            </p>
+            
+            <p style="margin: 0.5rem 0; font-size: 0.9rem;">
+                <strong>Coming Soon:</strong> Protein interaction networks & pathway analysis<br>
+                <small style="color: #666;">(Temporarily limited due to database size constraints)</small>
+            </p>
+        </div>
+
         <section class="input-section">
             <div class="input-grid">
                 <div>
@@ -415,6 +437,3 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
-
-
-
